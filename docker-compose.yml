@@ -1,0 +1,83 @@
+version: '3'
+
+networks:
+  orders-network:
+    external: true
+
+services:
+  rabbitmq:
+    image: rabbitmq:latest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - orders-network
+
+  postgres:
+    image: postgres:latest
+    environment:
+      POSTGRES_USER: username
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: BalanceService
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./scripts:/docker-entrypoint-initdb.d
+    networks:
+      - orders-network
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    networks:
+      - orders-network
+
+  balance-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: BalanceService
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on:
+      - rabbitmq
+      - postgres
+    networks:
+      - orders-network
+
+  http-api-service:
+    image: http-api-service
+    ports:
+      - "8080:8080"
+    depends_on:
+      - rabbitmq
+      - postgres
+      - balance-service
+      - order-processing-service
+    networks:
+      - orders-network
+
+  order-processing-service:
+    image: order-processing-service
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+    networks:
+      - orders-network
+  
+  quote-service:
+    image: quote-service
+    depends_on:
+      - rabbitmq
+      - postgres
+      - redis
+      - order-processing-service
+    networks:
+      - orders-network
